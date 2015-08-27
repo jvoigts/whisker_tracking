@@ -75,22 +75,20 @@ mousepresent_graded_mean=mousepresent_graded_mean(1:Nframes);
 disp('done checking mouse presence');
 fprintf('%d frames (%.1f%% of input) to track further\n',sum(mousepresent),100*mean(mousepresent));
 
-%% find nose (crap)
-tracknose.mpos=NaN(1,Nframes);
-tracknose.lpos=tracknose.mpos;
-tracknose.rpos=tracknose.mpos;
-tracknose.lnose=tracknose.mpos;
-tracknose.rnose=tracknose.mpos;
-tracknose.mouse_confidence=tracknose.mpos;
+%% track animal position
+tracknose.mpos=NaN(1,Nframes); % mean position
 
-tracknose.maxintensity=tracknose.mpos;
+tracknose.lpos=tracknose.mpos; % left border of animal
+tracknose.rpos=tracknose.mpos; % right "
 
-tracknose.retractgap=tracknose.mpos;
-tracknose.basegap=tracknose.mpos;
+tracknose.lnose=tracknose.mpos; % left nose position, like lpos but lower treshold
+tracknose.rnose=tracknose.mpos; % right "
 
-tracknose.laser_indicator=tracknose.mpos;
+tracknose.retractgap=tracknose.mpos; % for holding platform position
+tracknose.basegap=tracknose.mpos; % "
 
-skipn=2;
+
+skipn=2; % optionally track only every 2nd frame here
 
 skipi=[0:skipn-1];
 
@@ -120,9 +118,7 @@ for fnum=trackframes(1:skipn:end)
     
     Icrop_nogray=Icrop;
     
-    tracknose.maxintensity(fnum+skipi)=max(Icrop_nogray(:));
     
-    tracknose.laser_indicator(fnum+skipi) = mean(mean(I(1:25,173:191)));
     
     widthscale=[1:size(Icrop_nogray,2)];
     
@@ -163,7 +159,6 @@ for fnum=trackframes(1:skipn:end)
     try
         tracknose.rpos(fnum+skipi)=  max(find(mean((Icrop_nogray<10))>.1));
     end;
-    tracknose.mouse_confidence(fnum+skipi) = mean(mean((Icrop_nogray<10))>.2);
     
     try
         tracknose.lnose(fnum+skipi)=min(find((mean(imerode(imdilate(Icrop_nogray(70:end,:),se),se)<50))>.01));
