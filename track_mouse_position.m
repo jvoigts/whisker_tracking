@@ -3,7 +3,7 @@
 % This script extracts rough position of the mouse. This position is then
 % used for simple whisker tracking.
 %
-% 2015 jvoigts@mit.edu
+% 2014 Jakob Voigts (jvoigts@mit.edu)
 
 
 vid = VideoReader(fullfile('example_data/example_video.avi'));

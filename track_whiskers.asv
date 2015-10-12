@@ -3,7 +3,6 @@
 
 % load conv net coefficients
 % alternatively, use train_cnn.m to train the convnet from scratch
-addpath('ConvNet-master\');
 
 load(fullfile('example_data','cnn_8_3_15.mat'));
 funtype = 'matlab';
@@ -80,7 +79,7 @@ Nframes=vid.NumberOfFrames
             
             if mod(c,plotskip)==0
                 fps=plotskip/(cputime-lasttic);
-                fprintf('%d/%d frames (%d%%) (%f fps) \n',c,round(numel(trackframes)/skipn),round(((c*skipn)/numel(trackframes))*100),fps);
+                fprintf('pathnum %d | %d/%d frames (%d%%) (%f fps) \n',pathnum,c,round(numel(trackframes)/skipn),round(((c*skipn)/numel(trackframes))*100),fps);
                 lasttic=cputime;
             end;
             
@@ -92,24 +91,46 @@ Nframes=vid.NumberOfFrames
             plot(mean(nose_y_detect'));
             m=mean(nose_y_detect'); m=m./sum(m);
             epochs.nosedist_display(2,fnum) =min(find(cumsum(m)>.5));
-            nose_y=epochs.nosedist_display(2,fnum);
+            nose_y=epochs.nosedist_display(2,fnum)+150;
             
             Icrop_nogray=Icrop;
+            
+            
             widthscale=[1:size(Icrop_nogray,2)];
-       
+            
+            % Icrop_nogray=imdilate(Icrop_nogray,se);
+            
+            
             uim = single(I(:,:,1));
             
             % make tiles to feed into CNN
-            % use pre-computed tile indices 
-            %  and just slect
+            
+            % this is way slow, instead just pre-compute the indices from
+            %full image to stack of inradius sized tiles and just slect
             %which ones to use here
             x=0;
             tic
             
             [isteps,jsteps] = meshgrid(inradius+10:size(uim,1)-inradius-10, inradius+10:size(uim,2)-inradius-10);
             
-            use_stack =  sqrt((nose_x-jsteps(:)+inradius*2).^2+(nose_y-isteps(:)+inradius*2).^2)<110 ;
+            use_stack = sign(nose_y-isteps(:)+inradius*2-(10*direction(fnum)))~=direction(fnum) & sqrt((nose_x-jsteps(:)+inradius*2).^2+(nose_y-isteps(:)+inradius*2).^2)<110 ;
             
+            %{
+             use_stack=[];
+             for i=isteps
+                 for j=jsteps
+                     x=x+1;
+                     %use_stack(x) = abs(nose_x-j)<150 & abs(nose_y-i)<140 ;
+                     use_stack(x) = sign(nose_y-i+inradius*2-(10*direction(fnum)))~=direction(fnum) & sqrt((nose_x-j+inradius*2).^2+(nose_y-i+inradius*2).^2)<110 ;
+                     % imstack(:,:,x)=double((uim(i-inradius:i+inradius,j-inradius:j+inradius)./255)-0.5);
+                     
+                     %  ii=sub2ind(size(uim),i+meshgrid(-inradius:inradius)',j+meshgrid(-inradius:inradius));
+                     %  uim_2_ii(x,:)= ii(:);
+                 end;
+             end;
+             
+             toc
+            %}
             
             pred=ones(stacksize,2);
             runon=find(use_stack);
