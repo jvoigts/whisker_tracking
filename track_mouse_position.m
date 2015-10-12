@@ -4,7 +4,7 @@
 c=0;
 
 
- 
+
 
 vid = VideoReader(fullfile('example_data/example_video.avi'));
 Nframes=vid.NumberOfFrames
@@ -19,7 +19,7 @@ ll=linspace(0,1,50);
 
 
 skipN=20; % skip every N frames for detecting presence
-Nprint=500;
+Nprint=10;
 tic;
 c=0;
 for i=1:Nframes
@@ -75,7 +75,8 @@ mousepresent_graded_mean=mousepresent_graded_mean(1:Nframes);
 disp('done checking mouse presence');
 fprintf('%d frames (%.1f%% of input) to track further\n',sum(mousepresent),100*mean(mousepresent));
 
-%% track animal position
+%% track animal position frame by frame
+
 tracknose.mpos=NaN(1,Nframes); % mean position
 
 tracknose.lpos=tracknose.mpos; % left border of animal
@@ -84,32 +85,32 @@ tracknose.rpos=tracknose.mpos; % right "
 tracknose.lnose=tracknose.mpos; % left nose position, like lpos but lower treshold
 tracknose.rnose=tracknose.mpos; % right "
 
-tracknose.retractgap=tracknose.mpos; % for holding platform position
-tracknose.basegap=tracknose.mpos; % "
+tracknose.retractgap=tracknose.mpos; % platform position
+tracknose.basegap=tracknose.mpos;    % base platform position
 
 
 skipn=2; % optionally track only every 2nd frame here
+ifplot=1; % swicth whether to plot images or not
 
-skipi=[0:skipn-1];
-
-ifplot=0;
-trackframes=find(mousepresent_graded>1);
+trackframes=find(mousepresent_graded>1); % only further track frames with a mouse present
 c=0;  se = strel('ball',3,3);
-
+skipi=[0:skipn-1];
 for fnum=trackframes(1:skipn:end)
     c=c+1;
     if mod(c,20)==0
-        clf;
-          subplot(211); hold on;
-        conf=tracknose.mouse_confidence;
-        plot(tracknose.mpos.*(conf>0),'k');
-        plot(tracknose.lpos.*(conf>0),'g--');
-        plot(tracknose.rpos.*(conf>0),'r--');
-        plot(tracknose.lnose.*(conf>0),'g');
-        plot(tracknose.rnose.*(conf>0),'r');
-     %   plot(conf.*60)
-        xlim([-1000 0]+fnum);
-        drawnow;
+        if ~ifplot
+            clf;
+            subplot(211); hold on;
+            conf=mousepresent_graded_mean;
+            plot(tracknose.mpos.*(conf>0),'k');
+            plot(tracknose.lpos.*(conf>0),'g--');
+            plot(tracknose.rpos.*(conf>0),'r--');
+            plot(tracknose.lnose.*(conf>0),'g');
+            plot(tracknose.rnose.*(conf>0),'r');
+            %   plot(conf.*60)
+            xlim([-1000 0]+fnum);
+            drawnow;
+        end;
         fprintf('%d/%d frames (%d%%/ %d%%) \n',fnum,Nframes,round((fnum/Nframes)*100),round(((c*skipn)/numel(trackframes))*100));
     end;
     
@@ -119,25 +120,22 @@ for fnum=trackframes(1:skipn:end)
     Icrop_nogray=Icrop;
     
     
-    
     widthscale=[1:size(Icrop_nogray,2)];
     
-    Icrop_nogray=imdilate(Icrop_nogray,se);
+    Icrop_nogray=imdilate(Icrop_nogray,se); % pre-process image for tracking rough features
     
     ff=[ones(1,5).*1,ones(1,5).*-1 ];
     Ig=max(conv2(double(Icrop_nogray),-ff,'same'),0);
-     Ig(Ig>350)=0;
-     Ig(1:70,:)=0; Ig(:,1:300)=0; Ig(:,400:end)=0;
-       
-    %gp= max(find( mean(Icrop_nogray(20:end,:))>40));
-    [~,gp]= max(mean(Ig));    
+    Ig(Ig>350)=0;
+    Ig(1:70,:)=0; Ig(:,1:300)=0; Ig(:,400:end)=0;
+    
+    [~,gp]= max(mean(Ig));
     tracknose.retractgap(fnum+skipi)=gp;
-
+    
     
     Ig=max(conv2(double(Icrop_nogray),ff,'same'),0);
-    Ig(Ig>120)=0;
-    Ig(1:70,:)=0; Ig(:,1:5)=0; Ig(:,250:end)=0;
-    [~,bp]= max(mean(Ig));    
+    Ig(Ig>120)=0; Ig(:,1:5)=0; Ig(:,250:end)=0;
+    [~,bp]= max(mean(Ig));
     tracknose.basegap(fnum+skipi)=bp;
     Icrop_nogray(:,gp-2:end)=120;
     
@@ -147,9 +145,9 @@ for fnum=trackframes(1:skipn:end)
     dark_left = max(find(max(Icrop_nogray)<80));
     if numel(dark_left)==0; dark_left=0; end;
     dark_left=min(dark_left,150);
-     Icrop_nogray(:,1:dark_left+15)=120;
-     Icrop_nogray(1:40,1:dark_left+100)=120;
-     
+    Icrop_nogray(:,1:dark_left+15)=120;
+    Icrop_nogray(1:40,1:dark_left+100)=120;
+    
     %  Icrop_nogray(Icrop_nogray>10 & Icrop_nogray<50) = 120;
     
     tracknose.mpos(fnum+skipi)=sum((mean((Icrop_nogray<10))./sum(mean((Icrop_nogray<10)))).*widthscale);
@@ -167,35 +165,55 @@ for fnum=trackframes(1:skipn:end)
         tracknose.rnose(fnum+skipi)=max(find((mean(imerode(Icrop_nogray(40:end,:),se)<20))>.01));
     end;
     
-  %  video_run_cnn_01();
+    %  video_run_cnn_01();
     
     if ifplot==1
-       % clf;
+        clf;
+        subplot(211); hold on;
+        conf=mousepresent_graded_mean;
+        plot(tracknose.mpos.*(conf>0),'k');
+        plot(tracknose.lpos.*(conf>0),'g--');
+        plot(tracknose.rpos.*(conf>0),'r--');
+        plot(tracknose.lnose.*(conf>0),'g');
+        plot(tracknose.rnose.*(conf>0),'r');
+        xlim([-1000 0]+fnum);
+        
         subplot(212);
+        hold off; plot(0); hold on;
         imagesc(Icrop_nogray); daspect([1 1 1]);
         
-       % subplot(212);
-       % imagesc(iout); daspect([1 1 1]);
-     %   imagesc(Icrop_nogray);
-       % 
+        % subplot(212);
+        % imagesc(iout); daspect([1 1 1]);
+        %   imagesc(Icrop_nogray);
+        %
         hold on; colormap gray;
         
-        plot(tracknose.mpos(fnum).*[1 1],[40 50],'r-');
+        plot(tracknose.mpos(fnum).*[1 1],[40 50],'k-');
+        text(tracknose.mpos(fnum), 45,'mean pos','color','k');
+        
         plot([1 1].*tracknose.lpos(fnum),[0 50],'g-');
+        text(tracknose.lpos(fnum), 25,'l pos','color','g');
+        
         plot([1 1].*tracknose.lnose(fnum),[100 250],'g-');
+        text(tracknose.lpos(fnum), 150,'l nose','color','g');
         
         plot([1 1].*tracknose.rpos(fnum),[0 50],'r-');
-        plot([1 1].*tracknose.rnose(fnum),[100 250],'r-');
+        text(tracknose.rpos(fnum), 25,'r pos','color','r');
         
-        plot([1 1].*tracknose.basegap(fnum),[240 280],'r--');
-       plot([1 1].*tracknose.retractgap(fnum),[240 280],'r--');
+        plot([1 1].*tracknose.rnose(fnum),[100 250],'r-');
+        text(tracknose.rnose(fnum), 150,'r nose','color','r');
+        
+        plot([1 1].*tracknose.basegap(fnum),[240 280],'b--');
+        text(tracknose.basegap(fnum), 270,'base gap','color','b');
+        
+        plot([1 1].*tracknose.retractgap(fnum),[240 280],'b--');
+        text(tracknose.retractgap(fnum), 270,'retracting  gap','color','b');
         
         drawnow;
     end;
 end;
 disp('done tracking');
 %% assemble results
-
 
 % find retracting gap pos
 ll=[1:size(Icrop,2)];
@@ -258,7 +276,7 @@ for i=wsize+1:numel(tracknose.retractgap)-wsize-1
     tracknose.retractgap_median(i) = median(tracknose.retractgap([-wsize wsize]+i));
 end;
 f=normpdf([-10:10],0,5); f=f./sum(f);
- tracknose.retractgap_median=conv( tracknose.retractgap_median,f,'same');
+tracknose.retractgap_median=conv( tracknose.retractgap_median,f,'same');
 
 plot(tracknose.retractgap+300,'g');
 plot(tracknose.retractgap_median+300,'k');
@@ -274,34 +292,34 @@ plot(tracknose.basegap+300,'g');
 
 t=find((tracknose.lnose < 1) .* (conf>0)   );
 tracknose.lnose_fix=tracknose.lnose;
- tracknose.rnose_fix(t)=tracknose.lpos(t)-15;
+tracknose.rnose_fix(t)=tracknose.lpos(t)-15;
 
 
 % fix transient tracking breakdowns
 lnose_diff = [0 abs(diff(tracknose.lnose))];
 brkdwn=find((lnose_diff > 50) .* (conf>0)   );
 if numel(brkdwn) >0
-plot(brkdwn,100,'ks');
-
-for i=1:numel(brkdwn)-1
-    t=brkdwn(i)-1:brkdwn(i+1)+1;
-    if numel(t) >20
-        t=t(1:20);
+    plot(brkdwn,100,'ks');
+    
+    for i=1:numel(brkdwn)-1
+        t=brkdwn(i)-1:brkdwn(i+1)+1;
+        if numel(t) >20
+            t=t(1:20);
+        end;
+        d=tracknose.lnose(t(1)-0)-tracknose.lpos(t(1)-0);
+        dnext=tracknose.lnose(t(1)+1)-tracknose.lpos(t(1)+1);
+        if abs(dnext)>40
+            tracknose.lnose_fix(t)=tracknose.lpos(t)+d;
+        end;
     end;
-    d=tracknose.lnose(t(1)-0)-tracknose.lpos(t(1)-0);
-    dnext=tracknose.lnose(t(1)+1)-tracknose.lpos(t(1)+1);
-    if abs(dnext)>40
-    tracknose.lnose_fix(t)=tracknose.lpos(t)+d;
-    end;
-end;
-plot((tracknose.lnose_fix.*(conf>0))-80,'b');
+    plot((tracknose.lnose_fix.*(conf>0))-80,'b');
 end;
 % on the rightward ones well just use rpos when nose is poast the cutoff
 % for the gap
 
 t=find((tracknose.rnose-80 > 290) .* (conf>0)   );
 tracknose.rnose_fix=tracknose.rnose;
- tracknose.rnose_fix(t)=tracknose.rpos(t)+15;
+tracknose.rnose_fix(t)=tracknose.rpos(t)+15;
 plot((tracknose.rnose_fix.*(conf>0))-80,'k');
 
 
@@ -341,9 +359,9 @@ plot(onsets,onsetpos,'rs');
 trs=200;
 np_lo=-100;
 np_hi=300;
- 
+
 epochs.gapdist=epochs.nosedist.*NaN;
-  
+
 for i=1:numel(onsets)-1
     t=[offsets(i):onsets(i)];
     tt=[onsets(i):offsets(i+1)];
@@ -367,7 +385,7 @@ for i=1:numel(onsets)-1
     [~,gp]=max(h);
     epochs.gapdist([tt(1)-100:tt(end)+100])=gp-120;
     
-
+    
     % and where we retracted the target platform
     if  offsetpos(i) < trs % towzrds retracting platform
         retracted=tracknose.retractgap_median(tt)-120>mean([epochs.gappos epochs.gappos-epochs.retractiondist]);
@@ -375,14 +393,14 @@ for i=1:numel(onsets)-1
         retracted(end)=0;
         
         on=find(diff(retracted)==1);
-       % offsets=find(diff(retracted)==-1);
+        % offsets=find(diff(retracted)==-1);
         
         for j=1:numel(on)
             epochs.data_frames(end+1,1)=on(j)+tt(1);
             epochs.data_frames(end,2)=on(j)+5+tt(1);
             epochs.data_frames(end,3)=8;
-        
-            plot([0 15]+on(j)+tt(1),[1 1].*700,'r','LineWidth',15); 
+            
+            plot([0 15]+on(j)+tt(1),[1 1].*700,'r','LineWidth',15);
         end;
         
         
@@ -413,7 +431,7 @@ end;
 plot(epochs.nosedist_track(1,:),'k','LineWidth',2);
 plot(epochs.nosedist(1,:),'r','LineWidth',2);
 
- u=find(~isnan(epochs.gapdist));
+u=find(~isnan(epochs.gapdist));
 epochs.gapdist_display=interp1(u,epochs.gapdist(u), [1:numel(epochs.gapdist)]);
 
 epochs.nosedist=epochs.nosedist_track-40;
