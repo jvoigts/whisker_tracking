@@ -1,9 +1,9 @@
 
 %%
+addpath('ConvNet-master\','ConvNet-master\matlab');
 
 % load conv net coefficients
 % alternatively, use train_cnn.m to train the convnet from scratch
-addpath('ConvNet-master\');
 
 load(fullfile('example_data','cnn_8_3_15.mat'));
 funtype = 'matlab';
@@ -13,7 +13,7 @@ Nframes=vid.NumberOfFrames
 
 
 
-%% set up image ii mapping to stack
+%% set up image index mapping to stack
 disp('setting up convnet index mapping..');
 I=read(vid,1);
 uim = single(I(:,:,1));
@@ -45,7 +45,7 @@ disp('done');
 %% track
 skipn=1; % skip every Nth frame?
 plotskip=1;
-
+printskip=10;
 ifplot=1;
 
 skipi=[0:skipn-1];
@@ -58,13 +58,12 @@ whtracking=[];
 whtracking.intersect_mean=[];
 whtracking.intersect_im=[];
 whtracking.lines=[];
-whtracking.median_angle=nan(1,Nframes);
+whtracking.mean_angle=nan(1,Nframes);
 
 c=0;  se = strel('ball',3,3);
 se_big = strel('ball',10,10);
 f_big=fspecial('disk', 10);
-%  [0:1000]+92120;%
-% tic;
+
 lasttic=cputime-10;
 for fnum=trackframes
     c=c+1;
@@ -74,10 +73,10 @@ for fnum=trackframes
     I=read(vid,fnum);
     Icrop=I(170:450,10:420,1);
     
-    if     nose_x>50 & nose_x<400 %
+    if     nose_x>50 & nose_x<400 % do some crude filtering to restrict tracking to useful frames
         
-        if mod(c,plotskip)==0
-            fps=plotskip/(cputime-lasttic);
+        if mod(c,printskip)==0
+            fps=printskip/(cputime-lasttic);
             fprintf('%d/%d frames (%d%%) (%f fps) \n',c,round(numel(trackframes)/skipn),round(((c*skipn)/numel(trackframes))*100),fps);
             lasttic=cputime;
         end;
@@ -86,49 +85,49 @@ for fnum=trackframes
         Icrop=I(170:450,10:420,1);
         
         % find nose Y coord
+        % so far we only tracked x coord, now just track the darkest ares
+        % in y-direction to find y coord
         nose_y_detect = conv2(double(I(180:end,[-15:15]+nose_x+0,1)),f_big,'same')<40;
         %plot(mean(nose_y_detect'));
         m=mean(nose_y_detect'); m=m./sum(m);
         epochs.nosedist_track(2,fnum) =min(find(cumsum(m)>.5));
         nose_y=epochs.nosedist_track(2,fnum)+170;
         
-        Icrop_nogray=Icrop;
-        widthscale=[1:size(Icrop_nogray,2)];
-        
-        uim = single(I(:,:,1));
+        uim = single(I(:,:,1)); % input image
         
         % make tiles to feed into CNN
-        % use pre-computed tile indices
-        %  and just slect
-        %which ones to use here
-        
+        %  use pre-computed tile indices
+        %  and select which ones to use here - restrict tracking to radius
+        %  around nose pos.
         [isteps,jsteps] = meshgrid(inradius+10:size(uim,1)-inradius-10, inradius+10:size(uim,2)-inradius-10);
         use_stack =  sqrt((nose_x-jsteps(:)+inradius*2).^2+(nose_y-isteps(:)+inradius*2).^2)<110 ;
         
-        
-        pred=ones(stacksize,2);
+        pred=ones(stacksize,2); % set up prediction output
         runon=find(use_stack);
         
         ii=uim_2_ii(runon,:);
-        imstack_fast = ((reshape( uim(ii'), 11,11,numel(runon))./255)-0.5);
-        pred(runon,:) = cnnclassify(layers, weights, params, imstack_fast, funtype);
+        % reshape images into inradious*2 X inradious*2 X outputsize stack
+        imstack = ((reshape( uim(ii'), (inradius*2)+1,(inradius*2)+1,numel(runon))./255)-0.5);  % re-normalize image range
+        pred(runon,:) = cnnclassify(layers, weights, params, imstack, funtype);
         
         isteps_lin=inradius+10:size(uim,1)-inradius-10; %just as output size computation
         jsteps_lin = inradius+10:size(uim,2)-inradius-10;
-        iout=flipud(rot90(reshape(pred(:,2)',numel(jsteps_lin),numel(isteps_lin))));
+        iout=flipud(rot90(reshape(pred(:,2)',numel(jsteps_lin),numel(isteps_lin)))); % re-assemble output image
         
         
-        % fast mose removal
+        % Even though the CNN should have learned to not label pieces of
+        % fur close to the head, running a 2nd cleanup step here is nice
+        % and cheap. Most importantly, we could easily run this step with a larger
+        % neighborhood size if needed and train the CNN with an inradius
+        % that might be a bit too small for avoiding fur labelling but good
+        % enough for vibrissa tracking.
         rem_mouse = (conv2(double(uim(inradius+10:end-inradius-10,inradius+10:end-inradius-10)<100),f_big,'same')<.2);
         
         % identify rough whisker angle via hough transform
-        Imask=iout.*0;
+        Imask=iout.*0; % as before, restrict the transform to an area arounf the nose
         try
-            %j=round(epochs.nosedist_display(1,fnum)+110);
-            %i=round(-epochs.nosedist_display(2,fnum)+450);
             j=nose_x;
             i=nose_y;
-            
             Imask(i, j)=Imask(i, j)+1;
         end;
         if sum(Imask(:))>0
@@ -137,25 +136,28 @@ for fnum=trackframes
             Imask=Imask./max(Imask(:));
         end;
         
-        Ihough = ((Imask.*(1-iout))>0.2).*rem_mouse;
-        
-        
+        Ihough = ((Imask.*(1-iout))>0.2).*rem_mouse; % threshold CNN output and clean up for input to hough transform
         
         [H,theta,rho] = hough(Ihough);
-        P = houghpeaks(H,20,'threshold',ceil(0.01*max(H(:))));
-        lines = houghlines(Ihough,theta,rho,P,'FillGap',4,'MinLength',6);
+        P = houghpeaks(H,20,'threshold',ceil(0.01*max(H(:)))); % parameters might need tweaking here
+        lines = houghlines(Ihough,theta,rho,P,'FillGap',4,'MinLength',6); % and here
         
-        
+        %save some per-frame info for later
         whtracking.intersect_mean(fnum) = mean(mean(Ihough(:, round(epochs.gappos)+[-15:5])));
         whtracking.intersect_im=Ihough(:, round(epochs.gappos)+[-15:5]);
         whtracking.lines{fnum}=lines;
+        
+        % run a very crude mean whisker angle computation
         if numel(lines)>0
-            whtracking.median_angle(fnum)=mean([lines.rho]);
+            whtracking.mean_angle(fnum)=mean([lines.rho]);
         end;
         
         if ifplot & mod(c,plotskip)==0
             clf;
-            subplot(211);
+            subplot(221);
+            imagesc(flipud(uim));daspect([1 1 1]);
+            
+            subplot(222);
             hold on;
             imagesc((uim(isteps_lin,jsteps_lin)./1000)+(1-iout)./5);
             colormap(gray); daspect([1 1 1]);
@@ -164,16 +166,17 @@ for fnum=trackframes
                 xy = [lines(k).point1; lines(k).point2];
                 plot(xy(:,1),xy(:,2),'LineWidth',1,'Color','green');
             end
+            axis tight;
             
-            subplot(212);
+            subplot(2,2,[3 4]);
             hold on;
             plot( epochs.nosedist_track(1,1:fnum),'k');
             text(0,100,'Nose x position','color','k');
             
             plot(-100+whtracking.intersect_mean.*10000);
             text(0,10,'Whisking pattern','color','r');
-              
-            plot( conv(whtracking.median_angle,[1 1 1]./3,'same'),'r');
+            
+            plot( conv(whtracking.mean_angle,[1 1 1]./3,'same'),'r');
             text(0,-112,'Whisker/platform intersections','color','b');
             drawnow;
         end;
