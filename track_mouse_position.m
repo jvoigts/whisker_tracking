@@ -304,7 +304,8 @@ if numel(brkdwn) >0
         tracknose.rnose_fix(t)=tracknose.rpos(t)+d;
     end;
 end;
+
 % we'd do the same procedure on the rightward ones 
 
 plot((tracknose.rnose_fix.*(conf>0)),'r','LineWidth',2);
-
+epochs.nosedist_track(1,:)=tracknose.rnose_fix; % this is the mouse x-position that we'll use for analysis and for whisker tracking in track_whiskers.m
