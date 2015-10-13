@@ -14,7 +14,7 @@ else
   error('"%s" - wrong type, must be either "cpu", "gpu" or "matlab"', type);
 end;
 t = toc;
-disp(['Total classification time: ' num2str(t)]);
+% disp(['Total classification time: ' num2str(t)]);
 
 end
 
