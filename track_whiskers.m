@@ -15,8 +15,10 @@ Nframes=vid.NumberOfFrames
     %% make/ init file
 
     whtracking=[];
-    whtracking.nosedist_display=epochs.nosedist_track;
-
+            whtracking.intersect_mean=[]
+            whtracking.intersect_im=[]
+            whtracking.lines=[]
+            
     %% set up image ii mapping to stack
     disp('setting up convnet index mapping..');
     I=read(vid,1);
@@ -67,16 +69,15 @@ Nframes=vid.NumberOfFrames
     lasttic=cputime-10;
     for fnum=trackframes
         c=c+1;
-        nose_x=round(epochs.nosedist_track(1,fnum)+110);
+        nose_x=round(epochs.nosedist_track(1,fnum));
         
         
         I=read(vid,fnum);
         Icrop=I(170:450,10:420,1);
         
         
-        
         %nose_y=round(-epochs.nosedist_display(2,fnum)+450);
-        if       nose_x>50 & nose_x<400 %& nose_y>150 & nose_y<410
+        if     nose_x>50 & nose_x<400 %& nose_y>150 & nose_y<410
             
             if mod(c,plotskip)==0
                 fps=plotskip/(cputime-lasttic);
@@ -88,11 +89,11 @@ Nframes=vid.NumberOfFrames
             Icrop=I(170:450,10:420,1);
             
             % find nose Y coord
-            nose_y_detect = conv2(double(I(166:end,[-15:15]+nose_x+20,1)),f_big,'same')<40;
-            plot(mean(nose_y_detect'));
+            nose_y_detect = conv2(double(I(180:end,[-15:15]+nose_x+0,1)),f_big,'same')<40;
+            %plot(mean(nose_y_detect'));
             m=mean(nose_y_detect'); m=m./sum(m);
-            epochs.nosedist_display(2,fnum) =min(find(cumsum(m)>.5));
-            nose_y=epochs.nosedist_display(2,fnum);
+            epochs.nosedist_track(2,fnum) =min(find(cumsum(m)>.5));
+            nose_y=epochs.nosedist_track(2,fnum)+170;
             
             Icrop_nogray=Icrop;
             widthscale=[1:size(Icrop_nogray,2)];
@@ -103,18 +104,13 @@ Nframes=vid.NumberOfFrames
             % use pre-computed tile indices 
             %  and just slect
             %which ones to use here
-            x=0;
-            tic
-            
+           
             [isteps,jsteps] = meshgrid(inradius+10:size(uim,1)-inradius-10, inradius+10:size(uim,2)-inradius-10);
-            
             use_stack =  sqrt((nose_x-jsteps(:)+inradius*2).^2+(nose_y-isteps(:)+inradius*2).^2)<110 ;
             
             
             pred=ones(stacksize,2);
             runon=find(use_stack);
-            %pred(runon,:) = cnnclassify(layers, weights, params,
-            %imstack(:,:,runon), funtype); % way slow
             
             ii=uim_2_ii(runon,:);
             imstack_fast = ((reshape( uim(ii'), 11,11,numel(runon))./255)-0.5);
@@ -125,12 +121,10 @@ Nframes=vid.NumberOfFrames
             iout=flipud(rot90(reshape(pred(:,2)',numel(jsteps_lin),numel(isteps_lin))));
             
             
-            %  rem_mouse=imerode(uim(inradius+10:end-inradius-10,inradius+10:end-inradius-10),se_big)>10;
-            %fatser
+            % fast mose removal
             rem_mouse = (conv2(double(uim(inradius+10:end-inradius-10,inradius+10:end-inradius-10)<100),f_big,'same')<.2);
             
             % identify rough whisker angle via hough transform
-            
             Imask=iout.*0;
             try
                 %j=round(epochs.nosedist_display(1,fnum)+110);
@@ -151,7 +145,8 @@ Nframes=vid.NumberOfFrames
             if ifplot & mod(c,plotskip)==0
                 clf;
                 hold on;
-                imagesc((uim(isteps_lin,jsteps_lin)./1000)+(1-iout)+Imask./10); colormap(gray); daspect([1 1 1]);
+                imagesc((uim(isteps_lin,jsteps_lin)./1000)+(1-iout)./5);
+                colormap(gray); daspect([1 1 1]);
                 plot([1 1].* epochs.gappos+110,[0 400],'g');
                 plot(nose_x, nose_y,'ro');
                 drawnow;
@@ -161,57 +156,20 @@ Nframes=vid.NumberOfFrames
             P = houghpeaks(H,20,'threshold',ceil(0.01*max(H(:))));
             lines = houghlines(Ihough,theta,rho,P,'FillGap',4,'MinLength',6);
             
-            %   clf;
-            %   imagesc(Ihough); colormap(gray); daspect([1 1 1]);
-            %   hold on;
             if ifplot & mod(c,plotskip)==0
                 for k = 1:length(lines)
                     xy = [lines(k).point1; lines(k).point2];
-                    plot(xy(:,1),xy(:,2),'LineWidth',2,'Color','green');
+                    plot(xy(:,1),xy(:,2),'LineWidth',1,'Color','green');
                 end
                 drawnow;
             end;
             
-            whtracking.intersect_mean(fnum) = mean(mean(Ihough(:, round(epochs.gappos)+[100:120])));
-            whtracking.intersect_im=Ihough(:, round(epochs.gappos)+[100:120]);
+            whtracking.intersect_mean(fnum) = mean(mean(Ihough(:, round(epochs.gappos)+[-10:10])));
+            whtracking.intersect_im=Ihough(:, round(epochs.gappos)+[-10:10]);
             whtracking.lines{fnum}=lines;
             
-            %   fprintf(' %f sec \n',frametime)
             
         end;
-        %{
-    gridcount=6;
-    clear pos imstack;
-    isteps=ceil(linspace(1,size(iout,1)-1,gridcount));
-    jsteps=ceil(linspace(1,size(iout,2)-1,gridcount));
-    for i=1:gridcount-1
-        for j=1:gridcount-1
-            
-        
-            Ihough=1-iout;
-            Ihough=Ihough(isteps(i):isteps(i+1),jsteps(j):jsteps(j+1))>.2;
-            
-            [H,theta,rho] = hough(Ihough);
-            P = houghpeaks(H,6,'threshold',ceil(0.1*max(H(:))));
-            lines = houghlines(Ihough,theta,rho,P,'FillGap',5,'MinLength',7);
-            
-            clf;
-            imagesc(Ihough); colormap(gray); daspect([1 1 1]);
-            hold on;
-            
-            for k = 1:length(lines)
-                xy = [lines(k).point1; lines(k).point2];
-                plot(xy(:,1),xy(:,2),'LineWidth',2,'Color','green');
-            end
-            drawnow;
-            pause(1);
-            
-            
-        end;
-    end;
-   
-        %}
-        
         
     end;
     
