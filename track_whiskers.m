@@ -11,7 +11,7 @@ funtype = 'matlab';
 vid = VideoReader(fullfile('example_data/example_video.avi'));
 Nframes=vid.NumberOfFrames
 
-
+disp('Make sure that track_mouse_position.m was run');
 
 %% set up image index mapping to stack
 disp('setting up convnet index mapping..');
@@ -100,7 +100,7 @@ for fnum=trackframes
         %  and select which ones to use here - restrict tracking to radius
         %  around nose pos.
         [isteps,jsteps] = meshgrid(inradius+10:size(uim,1)-inradius-10, inradius+10:size(uim,2)-inradius-10);
-        use_stack =  sqrt((nose_x-jsteps(:)+inradius*2).^2+(nose_y-isteps(:)+inradius*2).^2)<110 ;
+        use_stack =  sqrt((nose_x-jsteps(:)+inradius*2).^2+(nose_y-isteps(:)+inradius*2).^2)<120 ;
         
         pred=ones(stacksize,2); % set up prediction output
         runon=find(use_stack);
