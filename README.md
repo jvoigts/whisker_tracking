@@ -5,7 +5,8 @@ This repository includes a copy of ConvNet by Sergey Demyanov ( https://github.c
 
 This is _not_ the code described in our paper 'Unsupervised whisker tracking in unrestrained behaving animals', J Voigts, B Sakmann, T Celikel, Journal of neurophysiology 100 (1), 504-515 ( http://jn.physiology.org/content/100/1/504.short ), but a more recent, and simpler method. Specifically, this method only runs a CNN to label whiskers and misses all the code in the j neurophys method that turns such a labeled images into spline representations of individual whiskers.
 
-See also Per M Knutsen's whisker tracker on https://github.com/pmknutsen/whiskertracker, especially if you're interested in precise tracking of head position and angle, individual whiskers, and limbs.
+See also the Clack et al. 2012 method ( https://openwiki.janelia.org/wiki/display/MyersLab/Whisker+Tracking ) if you're interested in precise tracking of individual whiskers, and Per M Knutsen's whisker tracker ( https://github.com/pmknutsen/whiskertracker ),
+for tracking of vibrissae, head position and angle, and limbs.
 
 There are two main analysis steps in this implementation: Identifying animal presence and nose tracking, and whisker tracking.
 
