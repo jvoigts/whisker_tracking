@@ -1,4 +1,7 @@
 # whisker_tracking
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4315318.svg)](https://doi.org/10.5281/zenodo.4315318)
+
 Unsupervised whisker tracking in freely behaving mice/rats
 
 This repository includes a copy of ConvNet by Sergey Demyanov ( https://github.com/sdemyanov/ConvNet ) - if you'd rather use a recent version please get the current code from github.
